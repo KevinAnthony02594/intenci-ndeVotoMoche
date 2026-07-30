@@ -1,13 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-  /* ---------- Zonas (coordenadas reales, Huanchaco / Trujillo, La Libertad) ---------- */
+  /* ---------- Zonas (coordenadas reales, Moche / Trujillo, La Libertad) ---------- */
   const zonas = [
-    { id:'milagro',   nombre:'El Milagro',        lat:-8.023047, lng:-79.067330, color:'#c0392b' },
-    { id:'villamar',  nombre:'Villa del Mar',      lat:-8.097796, lng:-79.062740, color:'#e08e45' },
-    { id:'victorraul',nombre:'Víctor Raúl',        lat:-8.021041, lng:-79.070422, color:'#2e8b57' },
-    { id:'huanchito', nombre:'Huanchaquito',       lat:-8.097705, lng:-79.109337, color:'#2c5f8a' },
-    { id:'balneario', nombre:'Huanchaco Balneario',lat:-8.078579, lng:-79.120930, color:'#8e44ad' },
-    { id:'tropico',   nombre:'El Trópico',         lat:-8.086008, lng:-79.076372, color:'#c9a227' },
+    { id:'Moche',   nombre:'Moche',        lat:-8.171237, lng:-79.008996, color:'#c0392b' },
+    { id:'Miramar',  nombre:'Miramar',      lat:-8.179299, lng:-78.993800, color:'#e08e45' },
+    { id:'Delicias',nombre:'Delicias',        lat:-8.178349, lng:-79.014597, color:'#2e8b57' },
+    { id:'Acuario', nombre:'Acuario',       lat:-8.188303, lng:-79.006599, color:'#2c5f8a' },
+    { id:'Curva de Sun',   nombre:'Curva de Sun',         lat:-8.151175, lng:-79.013205, color:'#c9a227' },
+    { id:'Torres de San Borja', nombre:'Torres de San Borja',lat:-8.167677, lng:-79.024613, color:'#8e44ad' },
+    { id:'Campiña', nombre:'Campiña',lat:-8.144521, lng:-78.999499, color:'#44a9ad' },
   ];
 
   /* ---------- Referencias DOM ---------- */
@@ -37,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let zonaActual = null;
 
   /* ---------- Mapa (Leaflet + OpenStreetMap) ---------- */
-  const map = L.map('map', { scrollWheelZoom:false }).setView([-8.067, -79.086], 12);
+  const map = L.map('map', { scrollWheelZoom:false }).setView([-8.164267, -79.009903], 12);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution:'&copy; OpenStreetMap',
     maxZoom:18
