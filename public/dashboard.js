@@ -893,8 +893,8 @@ function crearTablaVotos(votos){
             v.id,
 
 
-            // new Date(v.fecha_registro)
-            // .toLocaleString("es-PE"),
+            new Date(v.fecha_registro)
+            .toLocaleString("es-PE"),
 
 
             v.zona || "Sin zona",
