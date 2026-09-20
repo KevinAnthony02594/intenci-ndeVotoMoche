@@ -4,9 +4,17 @@ const router = express.Router();
 const supabase = require("../config/supabase");
 const verificarToken = require("../middleware/auth");
 
-router.get("/", verificarToken, async (req, res) => {
+//-------------------------------------
+// Trae TODOS los votos paginando de 1000 en 1000
+//-------------------------------------
+async function obtenerTodosLosVotos() {
 
-    try {
+    const TAM = 1000;
+
+    let desde = 0;
+    let todos = [];
+
+    while (true) {
 
         const { data, error } = await supabase
 
@@ -26,11 +34,28 @@ router.get("/", verificarToken, async (req, res) => {
                 )
             `)
 
-            .order("fecha_registro", {
-                ascending: false
-            });
+            .order("fecha_registro", { ascending: false })
+
+            .range(desde, desde + TAM - 1);
 
         if (error) throw error;
+
+        todos = todos.concat(data);
+
+        // si vino menos de 1000, ya no hay más páginas
+        if (data.length < TAM) break;
+
+        desde += TAM;
+    }
+
+    return todos;
+}
+
+router.get("/", verificarToken, async (req, res) => {
+
+    try {
+
+        const data = await obtenerTodosLosVotos();
 
         //-------------------------------------
         // KPIs
@@ -57,6 +82,8 @@ router.get("/", verificarToken, async (req, res) => {
         //-------------------------------------
 
         data.forEach(v => {
+
+            if (!v.candidatos) return;
 
             const nombre =
                 `${v.candidatos.nombre} - ${v.candidatos.partido}`;
