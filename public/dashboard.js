@@ -781,7 +781,7 @@ function crearTablaVotos(votos){
     if(!tabla){
 
 
-        tabla = $('#tablaVotos').DataTable({
+        tabla = $('tablaVotos#').DataTable({
 
             responsive:true,
 
