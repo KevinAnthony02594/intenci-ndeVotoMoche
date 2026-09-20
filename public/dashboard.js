@@ -897,7 +897,7 @@ function crearTablaVotos(votos){
             // .toLocaleString("es-PE"),
 
 
-            // v.zona || "Sin zona",
+            v.zona || "Sin zona",
 
 
             v.dni || "Anónimo",
