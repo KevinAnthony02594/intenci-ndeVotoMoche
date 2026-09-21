@@ -1,462 +1,295 @@
-document.addEventListener("DOMContentLoaded",()=>{
+document.addEventListener("DOMContentLoaded", () => {
+  const token = localStorage.getItem("token");
 
+  const nombre = localStorage.getItem("nombre");
 
-const token = localStorage.getItem("token");
-
-const nombre = localStorage.getItem("nombre");
-
-
-if(!token){
-
-    window.location.href="index.html";
+  if (!token) {
+    window.location.href = "index.html";
 
     return;
+  }
 
+  document.getElementById("nombreAdmin").innerText = nombre || "Administrador";
+
+  let chartBarras = null;
+
+  let chartDona = null;
+
+  let mapa = null;
+
+  let tabla = null;
+
+  const zonasMapa = [
+    {
+      nombre: "El Milagro",
+      lat: -8.023047,
+      lng: -79.06733,
+    },
+
+    {
+      nombre: "Villa del Mar",
+      lat: -8.097796,
+      lng: -79.06274,
+    },
+
+    {
+      nombre: "Víctor Raúl",
+      lat: -8.021041,
+      lng: -79.070422,
+    },
+
+    {
+      nombre: "Huanchaquito",
+      lat: -8.097705,
+      lng: -79.109337,
+    },
+
+    {
+      nombre: "Huanchaco Balneario",
+      lat: -8.078579,
+      lng: -79.12093,
+    },
+
+    {
+      nombre: "El Trópico",
+      lat: -8.086008,
+      lng: -79.076372,
+    },
+  ];
+
+  // =============================
+  // CARGAR DASHBOARD
+  // =============================
+
+  async function cargarDashboard() {
+    try {
+      const response = await fetch("/api/dashboard", {
+        headers: {
+          Authorization: "Bearer " + token,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.clear();
+
+          window.location.href = "index.html";
+        }
+
+        throw new Error(data.message);
+      }
+
+      const dash = data.dashboard;
+
+      actualizarKpis(dash);
+
+      crearGraficoBarras(dash.partidos);
+
+      crearGraficoDona(dash.partidos);
+
+      crearMapa(dash.detalleZona);
+
+      crearRanking(dash.partidos);
+
+      crearTablaZona(dash.detalleZona);
+
+      crearTablaVotos(dash.votos);
+
+      document.getElementById("ultimaActualizacion").innerText =
+        new Date().toLocaleString();
+    } catch (error) {
+      console.error(error);
+
+      alert("Error cargando dashboard");
+    }
+  }
+
+  // =============================
+  // KPI
+  // =============================
+function actualizarKpis(dash) {
+  // 1. KPI Generales (existentes)
+  document.getElementById("kpiTotal").innerText = dash.total;
+
+  let conDni = 0;
+  let sinDni = 0;
+
+  dash.votos.forEach((v) => {
+    if (v.dni) {
+      conDni++;
+    } else {
+      sinDni++;
+    }
+  });
+
+  document.getElementById("kpiDni").innerText = conDni;
+  document.getElementById("kpiAnonimos").innerText = sinDni;
+  document.getElementById("kpiZonas").innerText = Object.keys(dash.zonas).length;
+
+  if (dash.ganador) {
+    document.getElementById("kpiGanador").innerText = dash.ganador.nombre;
+    document.getElementById("kpiGanadorVotos").innerText = dash.ganador.votos + " votos";
+  }
+
+  // 2. Procesamiento por Días (19 y 20)
+  procesarKpiPorDia(dash.votos, 19, "19");
+  procesarKpiPorDia(dash.votos, 20, "20");
 }
 
+function procesarKpiPorDia(votos, diaFiltro, sufijo) {
+  const votosDia = votos.filter((v) => {
+    if (!v.fecha_registro) return false;
+    // Convierte a hora local y extrae el día del mes
+    return new Date(v.fecha_registro).getDate() === diaFiltro;
+  });
 
-document.getElementById("nombreAdmin").innerText =
-nombre || "Administrador";
+  let conDni = 0;
+  let sinDni = 0;
+  let zonas = new Set();
+  let candidatosMap = {};
 
+  votosDia.forEach((v) => {
+    if (v.dni) conDni++;
+    else sinDni++;
 
+    if (v.zona) zonas.add(v.zona);
 
-let chartBarras=null;
+    // Conteo para determinar el ganador de ese día
+    let nombreCand = null;
+    if (v.candidatos) {
+      nombreCand = Array.isArray(v.candidatos)
+        ? v.candidatos[0]?.nombre
+        : v.candidatos.nombre;
+    }
 
-let chartDona=null;
+    if (nombreCand) {
+      candidatosMap[nombreCand] = (candidatosMap[nombreCand] || 0) + 1;
+    }
+  });
 
-let mapa=null;
+  // Renderizar valores en el DOM
+  document.getElementById(`kpiTotal${sufijo}`).innerText = votosDia.length;
+  document.getElementById(`kpiDni${sufijo}`).innerText = conDni;
+  document.getElementById(`kpiAnonimos${sufijo}`).innerText = sinDni;
+  document.getElementById(`kpiZonas${sufijo}`).innerText = zonas.size;
 
-let tabla=null;
-
-
-
-const zonasMapa=[
-
-{
-nombre:"El Milagro",
-lat:-8.023047,
-lng:-79.067330
-},
-
-{
-nombre:"Villa del Mar",
-lat:-8.097796,
-lng:-79.062740
-},
-
-{
-nombre:"Víctor Raúl",
-lat:-8.021041,
-lng:-79.070422
-},
-
-{
-nombre:"Huanchaquito",
-lat:-8.097705,
-lng:-79.109337
-},
-
-{
-nombre:"Huanchaco Balneario",
-lat:-8.078579,
-lng:-79.120930
-},
-
-{
-nombre:"El Trópico",
-lat:-8.086008,
-lng:-79.076372
+  // Determinar ganador
+  const listaCandidatos = Object.entries(candidatosMap).sort((a, b) => b[1] - a[1]);
+  if (listaCandidatos.length > 0) {
+    const [ganadorNombre, ganadorTotal] = listaCandidatos[0];
+    document.getElementById(`kpiGanador${sufijo}`).innerText = ganadorNombre;
+    document.getElementById(`kpiGanadorVotos${sufijo}`).innerText = `${ganadorTotal} votos`;
+  } else {
+    document.getElementById(`kpiGanador${sufijo}`).innerText = "Sin datos";
+    document.getElementById(`kpiGanadorVotos${sufijo}`).innerText = "";
+  }
 }
-
-];
-
-
-
-// =============================
-// CARGAR DASHBOARD
-// =============================
-
-
-async function cargarDashboard(){
-
-
-try{
-
-
-const response = await fetch("/api/dashboard",{
-
-
-headers:{
-
-
-"Authorization":
-
-"Bearer "+token
-
-
-}
-
-
-});
-
-
-
-const data = await response.json();
-
-
-
-if(!response.ok){
-
-
-if(response.status===401){
-
-
-localStorage.clear();
-
-window.location.href="index.html";
-
-
-}
-
-
-throw new Error(data.message);
-
-
-}
-
-
-
-const dash=data.dashboard;
-
-
-actualizarKpis(dash);
-
-
-crearGraficoBarras(dash.partidos);
-
-
-crearGraficoDona(dash.partidos);
-
-
-crearMapa(dash.detalleZona);
-
-
-crearRanking(dash.partidos);
-
-
-crearTablaZona(dash.detalleZona);
-
-
-crearTablaVotos(dash.votos);
-
-
-
-document.getElementById(
-"ultimaActualizacion"
-).innerText =
-new Date().toLocaleString();
-
-
-
-}catch(error){
-
-
-console.error(error);
-
-
-alert(
-"Error cargando dashboard"
-);
-
-
-}
-
-
-
-}
-
-
-
-
-// =============================
-// KPI
-// =============================
-
-
-function actualizarKpis(dash){
-
-
-document.getElementById("kpiTotal")
-.innerText=dash.total;
-
-
-
-let conDni=0;
-
-
-let sinDni=0;
-
-
-
-dash.votos.forEach(v=>{
-
-
-if(v.dni){
-
-conDni++;
-
-}else{
-
-sinDni++;
-
-}
-
-
-});
-
-
-
-document.getElementById("kpiDni")
-.innerText=conDni;
-
-
-
-document.getElementById("kpiAnonimos")
-.innerText=sinDni;
-
-
-
-document.getElementById("kpiZonas")
-.innerText=
-Object.keys(dash.zonas).length;
-
-
-
-if(dash.ganador){
-
-
-document.getElementById("kpiGanador")
-.innerText=
-dash.ganador.nombre;
-
-
-
-document.getElementById("kpiGanadorVotos")
-.innerText=
-dash.ganador.votos+" votos";
-
-
-}
-
-
-}
-// =============================
-// GRAFICO DE BARRAS
-// =============================
-let graficoBarras;
-
-
-function crearGraficoBarras(partidos){
-
-
+  // =============================
+  // GRAFICO DE BARRAS
+  // =============================
+  let graficoBarras;
+
+  function crearGraficoBarras(partidos) {
     const datos = Object.values(partidos);
 
+    const labels = datos.map((p) => p.nombre);
 
-    const labels = datos.map(p=>p.nombre);
+    const valores = datos.map((p) => p.votos);
 
-
-    const valores = datos.map(p=>p.votos);
-
-
-
-    const ctx = document
-        .getElementById("graficoBarras")
-        .getContext("2d");
-
-
+    const ctx = document.getElementById("graficoBarras").getContext("2d");
 
     // destruir gráfico anterior
-    if(graficoBarras){
-
-        graficoBarras.destroy();
-
+    if (graficoBarras) {
+      graficoBarras.destroy();
     }
 
+    graficoBarras = new Chart(ctx, {
+      type: "bar",
 
+      data: {
+        labels: labels,
 
-    graficoBarras = new Chart(ctx,{
+        datasets: [
+          {
+            label: "Cantidad de votos",
 
+            data: valores,
+          },
+        ],
+      },
 
-        type:"bar",
+      options: {
+        responsive: true,
 
-
-        data:{
-
-
-            labels:labels,
-
-
-            datasets:[{
-
-                label:"Cantidad de votos",
-
-                data:valores
-
-            }]
-
+        plugins: {
+          legend: {
+            display: false,
+          },
         },
-
-
-        options:{
-
-
-            responsive:true,
-
-
-            plugins:{
-
-
-                legend:{
-
-
-                    display:false
-
-
-                }
-
-
-            }
-
-
-        }
-
-
+      },
     });
+  }
 
+  // =============================
+  // GRAFICO DONA
+  // =============================
 
-}
+  let graficoDona;
 
-// =============================
-// GRAFICO DONA
-// =============================
-
-let graficoDona;
-
-
-function crearGraficoDona(partidos){
-
-
+  function crearGraficoDona(partidos) {
     const datos = Object.values(partidos);
 
-
-
-    const ctx = document
-        .getElementById("graficoDona")
-        .getContext("2d");
-
-
+    const ctx = document.getElementById("graficoDona").getContext("2d");
 
     // evitar duplicar gráficos al actualizar cada cierto tiempo
-    if(graficoDona){
-
-        graficoDona.destroy();
-
+    if (graficoDona) {
+      graficoDona.destroy();
     }
 
+    graficoDona = new Chart(ctx, {
+      type: "doughnut",
 
+      data: {
+        labels: datos.map((p) => p.nombre),
 
-    graficoDona = new Chart(ctx,{
+        datasets: [
+          {
+            label: "Votos",
 
-        type:"doughnut",
+            data: datos.map((p) => p.votos),
+          },
+        ],
+      },
 
+      options: {
+        responsive: true,
 
-        data:{
-
-
-            labels:datos.map(p=>p.nombre),
-
-
-            datasets:[{
-
-                label:"Votos",
-
-                data:datos.map(p=>p.votos)
-
-            }]
-
-
+        plugins: {
+          legend: {
+            position: "right",
+          },
         },
-
-
-        options:{
-
-
-            responsive:true,
-
-
-            plugins:{
-
-
-                legend:{
-
-
-                    position:"right"
-
-
-                }
-
-
-            }
-
-
-        }
-
-
+      },
     });
-
-
-
-}
-// =============================
-// MAPA POR ZONAS
-// =============================
-function crearMapa(detalleZona){
-
-
-    if(mapa){
-
-        mapa.remove();
-
+  }
+  // =============================
+  // MAPA POR ZONAS
+  // =============================
+  function crearMapa(detalleZona) {
+    if (mapa) {
+      mapa.remove();
     }
 
+    mapa = L.map("mapaDashboard").setView([-8.067, -79.086], 12);
 
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap",
+    }).addTo(mapa);
 
-    mapa = L.map("mapaDashboard")
-    .setView(
-        [-8.067,-79.086],
-        12
-    );
-
-
-
-    L.tileLayer(
-        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        {
-
-            attribution:
-            "&copy; OpenStreetMap"
-
-        }
-
-    ).addTo(mapa);
-
-
-
-
-    Object.entries(detalleZona).forEach(([zona,datos])=>{
-
-
-        let contenido = `
+    Object.entries(detalleZona).forEach(([zona, datos]) => {
+      let contenido = `
 
 
         <strong>${zona}</strong>
@@ -475,13 +308,8 @@ function crearMapa(detalleZona){
 
         `;
 
-
-
-        Object.entries(datos.partidos)
-        .forEach(([partido,cantidad])=>{
-
-
-            contenido += `
+      Object.entries(datos.partidos).forEach(([partido, cantidad]) => {
+        contenido += `
 
 
             ${partido}
@@ -496,81 +324,39 @@ function crearMapa(detalleZona){
 
 
             `;
+      });
 
+      let coordenada = zonasMapa.find((z) => z.nombre === zona);
 
-        });
+      if (coordenada) {
+        L.marker([coordenada.lat, coordenada.lng])
 
+          .addTo(mapa)
 
-
-
-        let coordenada =
-        zonasMapa.find(
-            z=>z.nombre===zona
-        );
-
-
-
-        if(coordenada){
-
-
-            L.marker(
-
-                [
-                    coordenada.lat,
-                    coordenada.lng
-                ]
-
-            )
-
-            .addTo(mapa)
-
-            .bindPopup(contenido);
-
-
-        }
-
-
-
+          .bindPopup(contenido);
+      }
     });
+  }
 
+  // =============================
+  // RANKING
+  // =============================
+  function crearRanking(partidos) {
+    const contenedor = document.getElementById("rankingCandidatos");
 
-} 
-
-// =============================
-// RANKING
-// =============================
-function crearRanking(partidos){
-
-
-    const contenedor =
-    document.getElementById("rankingCandidatos");
-
-
-    if(!contenedor){
-
-        console.error("No existe el contenedor rankingCandidatos");
-        return;
-
+    if (!contenedor) {
+      console.error("No existe el contenedor rankingCandidatos");
+      return;
     }
-
-
 
     const datos = Object.values(partidos);
 
+    datos.sort((a, b) => b.votos - a.votos);
 
+    let html = "";
 
-    datos.sort((a,b)=>b.votos-a.votos);
-
-
-
-    let html="";
-
-
-
-    datos.forEach((p,index)=>{
-
-
-        html += `
+    datos.forEach((p, index) => {
+      html += `
 
         <div class="ranking-item">
 
@@ -578,7 +364,7 @@ function crearRanking(partidos){
             <div>
 
                 <strong>
-                    #${index+1} ${p.nombre}
+                    #${index + 1} ${p.nombre}
                 </strong>
 
                 <br>
@@ -600,41 +386,24 @@ function crearRanking(partidos){
         </div>
 
         `;
-
-
     });
 
-
-
     contenedor.innerHTML = html;
+  }
 
+  // =============================
+  // TABLA ZONA X PARTIDO
+  // =============================
 
-}
+  function crearTablaZona(detalleZona) {
+    const cabecera = document.getElementById("cabeceraZona");
 
-// =============================
-// TABLA ZONA X PARTIDO
-// =============================
+    const cuerpo = document.getElementById("bodyZona");
 
-function crearTablaZona(detalleZona){
-
-
-    const cabecera =
-    document.getElementById("cabeceraZona");
-
-
-    const cuerpo =
-    document.getElementById("bodyZona");
-
-
-
-    if(!cabecera || !cuerpo){
-
-        console.error("No existe tabla zona");
-        return;
-
+    if (!cabecera || !cuerpo) {
+      console.error("No existe tabla zona");
+      return;
     }
-
-
 
     cabecera.innerHTML = `
 
@@ -642,46 +411,27 @@ function crearTablaZona(detalleZona){
 
     `;
 
-
-
     // Obtener partidos únicos
 
     let partidos = new Set();
 
-
-
-    Object.values(detalleZona).forEach(z=>{
-
-
-        Object.keys(z.partidos)
-        .forEach(p=>partidos.add(p));
-
-
+    Object.values(detalleZona).forEach((z) => {
+      Object.keys(z.partidos).forEach((p) => partidos.add(p));
     });
 
-
-
-    partidos=[...partidos];
-
-
+    partidos = [...partidos];
 
     // Cabecera dinámica
 
-    partidos.forEach(p=>{
-
-
-        cabecera.innerHTML += `
+    partidos.forEach((p) => {
+      cabecera.innerHTML += `
 
         <th>
         ${p}
         </th>
 
         `;
-
-
     });
-
-
 
     cabecera.innerHTML += `
 
@@ -689,17 +439,10 @@ function crearTablaZona(detalleZona){
 
     `;
 
+    cuerpo.innerHTML = "";
 
-
-    cuerpo.innerHTML="";
-
-
-
-    Object.entries(detalleZona)
-    .forEach(([zona,datos])=>{
-
-
-        let fila=`
+    Object.entries(detalleZona).forEach(([zona, datos]) => {
+      let fila = `
 
 
         <tr>
@@ -710,38 +453,23 @@ function crearTablaZona(detalleZona){
 
         `;
 
+      let total = 0;
 
+      partidos.forEach((p) => {
+        let cantidad = datos.partidos[p] || 0;
 
-        let total=0;
+        total += cantidad;
 
-
-
-        partidos.forEach(p=>{
-
-
-            let cantidad =
-            datos.partidos[p] || 0;
-
-
-
-            total += cantidad;
-
-
-
-            fila += `
+        fila += `
 
             <td>
             ${cantidad}
             </td>
 
             `;
+      });
 
-
-        });
-
-
-
-        fila += `
+      fila += `
 
         <td>
         <b>${total}</b>
@@ -751,91 +479,60 @@ function crearTablaZona(detalleZona){
 
         `;
 
-
-
-        cuerpo.innerHTML += fila;
-
-
+      cuerpo.innerHTML += fila;
     });
+  }
+  // =============================
+  // TABLA DE VOTOS DETALLADA
+  // =============================
 
-
-}
-// =============================
-// TABLA DE VOTOS DETALLADA
-// =============================
-
-function crearTablaVotos(votos){
-
-
+  function crearTablaVotos(votos) {
     const tablaHtml = $("#tablaVotos");
 
-
-    if(tablaHtml.length === 0){
-        console.error("No existe #tablaVotos");
-        return;
+    if (tablaHtml.length === 0) {
+      console.error("No existe #tablaVotos");
+      return;
     }
-
-
 
     // Crear DataTable solo una vez
-    if(!tabla){
+    if (!tabla) {
+      tabla = $("#tablaVotos").DataTable({
+        responsive: true,
 
+        pageLength: 10,
 
-        tabla = $('#tablaVotos').DataTable({
+        order: [[0, "desc"]],
 
-            responsive:true,
+        language: {
+          search: "Buscar:",
 
-            pageLength:10,
+          lengthMenu: "Mostrar _MENU_ registros",
 
-            order:[[0,"desc"]],
+          info: "Mostrando _START_ a _END_ de _TOTAL_",
 
-            language:{
+          zeroRecords: "No hay registros",
 
-                search:"Buscar:",
+          paginate: {
+            first: "Primero",
 
-                lengthMenu:
-                "Mostrar _MENU_ registros",
+            last: "Último",
 
-                info:
-                "Mostrando _START_ a _END_ de _TOTAL_",
+            next: "Siguiente",
 
-                zeroRecords:
-                "No hay registros",
-
-                paginate:{
-
-                    first:"Primero",
-
-                    last:"Último",
-
-                    next:"Siguiente",
-
-                    previous:"Anterior"
-
-                }
-
-            }
-
-        });
-
-
+            previous: "Anterior",
+          },
+        },
+      });
     }
-
-
 
     // limpiar sin destruir filtros
     tabla.clear();
 
+    votos.forEach((v) => {
+      let candidato = "Sin candidato";
+      let partido = "Sin partido";
 
-
-    votos.forEach(v=>{
-
-
-        let candidato="Sin candidato";
-        let partido="Sin partido";
-
-
-        /*
+      /*
           Supabase puede devolver:
 
           candidatos:{
@@ -854,232 +551,99 @@ function crearTablaVotos(votos){
 
         */
 
+      if (v.candidatos) {
+        if (Array.isArray(v.candidatos)) {
+          candidato = v.candidatos[0]?.nombre || "Sin candidato";
 
-        if(v.candidatos){
+          partido = v.candidatos[0]?.partido || "Sin partido";
+        } else {
+          candidato = v.candidatos.nombre || "Sin candidato";
 
-
-            if(Array.isArray(v.candidatos)){
-
-
-                candidato =
-                v.candidatos[0]?.nombre || "Sin candidato";
-
-
-                partido =
-                v.candidatos[0]?.partido || "Sin partido";
-
-
-            }else{
-
-
-                candidato =
-                v.candidatos.nombre || "Sin candidato";
-
-
-                partido =
-                v.candidatos.partido || "Sin partido";
-
-
-            }
-
-
+          partido = v.candidatos.partido || "Sin partido";
         }
+      }
 
+      tabla.row.add([
+        v.id,
 
+        new Date(v.fecha_registro).toLocaleString("es-PE"),
 
-        tabla.row.add([
+        v.zona || "Sin zona",
 
+        v.dni || "Anónimo",
 
-            v.id,
+        candidato,
 
-
-            new Date(v.fecha_registro)
-            .toLocaleString("es-PE"),
-
-
-            v.zona || "Sin zona",
-
-
-            v.dni || "Anónimo",
-
-
-            candidato,
-
-
-            partido
-
-
-        ]);
-
-
-
+        partido,
+      ]);
     });
 
-
-
     tabla.draw(false);
+  }
 
+  // =============================
+  // EXPORTAR EXCEL
+  // =============================
 
-}
+  document.getElementById("btnExcel").addEventListener("click", () => {
+    let tablaHTML = document.getElementById("tablaVotos");
 
+    let wb = XLSX.utils.table_to_book(tablaHTML);
 
-// =============================
-// EXPORTAR EXCEL
-// =============================
+    XLSX.writeFile(wb, "votos_elecciones_2026.xlsx");
+  });
 
+  // =============================
+  // EXPORTAR PDF
+  // =============================
 
-document
-.getElementById("btnExcel")
-.addEventListener("click",()=>{
+  document.getElementById("btnPDF").addEventListener("click", () => {
+    const { jsPDF } = window.jspdf;
 
+    const doc = new jsPDF();
 
-let tablaHTML =
-document
-.getElementById("tablaVotos");
+    doc.text("Resultados Elecciones 2026", 14, 15);
 
+    doc.autoTable({
+      html: "#tablaVotos",
 
+      startY: 25,
+    });
 
-let wb =
-XLSX.utils.table_to_book(
-tablaHTML
-);
+    doc.save("votos_elecciones_2026.pdf");
+  });
 
+  // =============================
+  // ACTUALIZAR MANUAL
+  // =============================
 
+  document.getElementById("btnActualizar").addEventListener("click", () => {
+    cargarDashboard();
+  });
 
-XLSX.writeFile(
-wb,
-"votos_elecciones_2026.xlsx"
-);
+  // =============================
+  // CERRAR SESIÓN
+  // =============================
 
+  document.getElementById("btnSalir").addEventListener("click", () => {
+    localStorage.removeItem("token");
 
+    localStorage.removeItem("nombre");
 
-});
+    window.location.href = "index.html";
+  });
 
+  // =============================
+  // ACTUALIZACION AUTOMATICA
+  // =============================
 
+  // cada 30 segundos
 
+  setInterval(() => {
+    cargarDashboard();
+  }, 30000);
 
-// =============================
-// EXPORTAR PDF
-// =============================
+  // Primera carga
 
-
-document
-.getElementById("btnPDF")
-.addEventListener("click",()=>{
-
-
-const {jsPDF}=window.jspdf;
-
-
-const doc =
-new jsPDF();
-
-
-
-doc.text(
-"Resultados Elecciones 2026",
-14,
-15
-);
-
-
-
-doc.autoTable({
-
-html:"#tablaVotos",
-
-startY:25
-
-});
-
-
-
-doc.save(
-"votos_elecciones_2026.pdf"
-);
-
-
-
-});
-
-
-
-
-// =============================
-// ACTUALIZAR MANUAL
-// =============================
-
-
-document
-.getElementById("btnActualizar")
-.addEventListener(
-"click",
-()=>{
-
-
-cargarDashboard();
-
-
-});
-
-
-
-
-// =============================
-// CERRAR SESIÓN
-// =============================
-
-
-document
-.getElementById("btnSalir")
-.addEventListener(
-"click",
-()=>{
-
-
-localStorage.removeItem(
-"token"
-);
-
-
-localStorage.removeItem(
-"nombre"
-);
-
-
-
-window.location.href=
-"index.html";
-
-
-});
-
-
-
-
-// =============================
-// ACTUALIZACION AUTOMATICA
-// =============================
-
-
-// cada 30 segundos
-
-
-setInterval(()=>{
-
-
-cargarDashboard();
-
-
-
-},30000);
-
-
-
-// Primera carga
-
-cargarDashboard();
-
-
-
+  cargarDashboard();
 });
